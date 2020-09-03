@@ -1,28 +1,28 @@
 find_package(sdl2)
 
+set(SDL2_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(SDL2_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-# General source files
-file(GLOB SOURCE_FILES
-  ${SDL2_SOURCE_DIR}/src/*.c
-  ${SDL2_SOURCE_DIR}/src/atomic/*.c
-  ${SDL2_SOURCE_DIR}/src/audio/*.c
-  ${SDL2_SOURCE_DIR}/src/cpuinfo/*.c
-  ${SDL2_SOURCE_DIR}/src/dynapi/*.c
-  ${SDL2_SOURCE_DIR}/src/events/*.c
-  ${SDL2_SOURCE_DIR}/src/file/*.c
-  ${SDL2_SOURCE_DIR}/src/libm/*.c
-  ${SDL2_SOURCE_DIR}/src/locale/*.c
-  ${SDL2_SOURCE_DIR}/src/render/*.c
-  ${SDL2_SOURCE_DIR}/src/render/*/*.c
-  ${SDL2_SOURCE_DIR}/src/stdlib/*.c
-  ${SDL2_SOURCE_DIR}/src/thread/*.c
-  ${SDL2_SOURCE_DIR}/src/timer/*.c
-  ${SDL2_SOURCE_DIR}/src/video/*.c
-  ${SDL2_SOURCE_DIR}/src/video/yuv2rgb/*.c)
 
 if (NOT SDL2_FOUND)
+set(SDL_SHARED_ENABLED_BY_DEFAULT OFF)
 
-include(CheckFunctionExists)
+if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
+  message(FATAL_ERROR "Prevented in-tree built. Please create a build directory outside of the SDL source code and call cmake from there")
+endif()
+
+#cmake_minimum_required(VERSION 3.0.0)
+#project(SDL2 C CXX)
+
+# !!! FIXME: this should probably do "MACOSX_RPATH ON" as a target property
+# !!! FIXME:  for the SDL2 shared library (so you get an
+# !!! FIXME:  install_name ("soname") of "@rpath/libSDL-whatever.dylib"
+# !!! FIXME:  instead of "/usr/local/lib/libSDL-whatever.dylib"), but I'm
+# !!! FIXME:  punting for now and leaving the existing behavior. Until this
+# !!! FIXME:  properly resolved, this line silences a warning in CMake 3.0+.
+# !!! FIXME:  remove it and this comment entirely once the problem is
+# !!! FIXME:  properly resolved.
+#cmake_policy(SET CMP0042 OLD)
+
 include(CheckLibraryExists)
 include(CheckIncludeFiles)
 include(CheckIncludeFile)
@@ -34,8 +34,10 @@ include(CheckTypeSize)
 include(CheckStructHasMember)
 include(CMakeDependentOption)
 include(FindPkgConfig)
-include(cmake/macros.cmake)
-include(cmake/sdlchecks.cmake)
+include(GNUInstallDirs)
+set(CMAKE_MODULE_PATH "${SDL2_SOURCE_DIR}/cmake")
+include(${SDL2_SOURCE_DIR}/cmake/macros.cmake)
+include(${SDL2_SOURCE_DIR}/cmake/sdlchecks.cmake)
 
 # General settings
 # Edit include/SDL_version.h and change the version, then:
@@ -55,6 +57,12 @@ set(SDL_VERSION "${SDL_MAJOR_VERSION}.${SDL_MINOR_VERSION}.${SDL_MICRO_VERSION}"
 set(DYLIB_CURRENT_VERSION 12.0.0)
 set(DYLIB_COMPATIBILITY_VERSION 1.0.0)
 
+# Set defaults preventing destination file conflicts
+set(SDL_CMAKE_DEBUG_POSTFIX ""
+    CACHE STRING "Name suffix for debug builds")
+
+mark_as_advanced(CMAKE_IMPORT_LIBRARY_SUFFIX SDL_CMAKE_DEBUG_POSTFIX)
+
 # Calculate a libtool-like version number
 math(EXPR LT_CURRENT "${SDL_MICRO_VERSION} - ${SDL_INTERFACE_AGE}")
 math(EXPR LT_AGE "${SDL_BINARY_AGE} - ${SDL_INTERFACE_AGE}")
@@ -63,7 +71,7 @@ set(LT_REVISION "${SDL_INTERFACE_AGE}")
 set(LT_RELEASE "${SDL_MAJOR_VERSION}.${SDL_MINOR_VERSION}")
 set(LT_VERSION "${LT_MAJOR}.${LT_AGE}.${LT_REVISION}")
 
-message(STATUS "${LT_VERSION} :: ${LT_AGE} :: ${LT_REVISION} :: ${LT_CURRENT} :: ${LT_RELEASE}")
+#message(STATUS "${LT_VERSION} :: ${LT_AGE} :: ${LT_REVISION} :: ${LT_CURRENT} :: ${LT_RELEASE}")
 
 # General settings & flags
 set(LIBRARY_OUTPUT_DIRECTORY "build")
@@ -153,11 +161,6 @@ if(APPLE OR ARCH_64)
   endif()
 endif()
 if(UNIX OR MINGW OR MSYS)
-  set(OPT_DEF_LIBC ON)
-endif()
-
-# https://stackoverflow.com/questions/39252385/c-linker-error-lnk2005-already-defined-in-sdl
-if(MSVC AND NOT ARCH_64)
   set(OPT_DEF_LIBC ON)
 endif()
 
@@ -268,7 +271,7 @@ endif()
 
 add_definitions(-DUSING_GENERATED_CONFIG_H)
 # General includes
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/include ${SDL2_SOURCE_DIR}/include)
+include_directories(${SDL2_BINARY_DIR}/include ${SDL2_SOURCE_DIR}/include)
 if(USE_GCC OR USE_CLANG)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -idirafter ${SDL2_SOURCE_DIR}/src/video/khronos")
 else()
@@ -333,8 +336,8 @@ set_option(SSE                 "Use SSE assembly routines" ${OPT_DEF_ASM})
 set_option(SSE2                "Use SSE2 assembly routines" ${OPT_DEF_SSEMATH})
 set_option(SSE3                "Use SSE3 assembly routines" ${OPT_DEF_SSEMATH})
 set_option(ALTIVEC             "Use Altivec assembly routines" ${OPT_DEF_ASM})
-set_option(ARMSIMD             "use SIMD assembly blitters on ARM" ON)
-set_option(ARMNEON             "use NEON assembly blitters on ARM" ON)
+set_option(ARMSIMD             "use SIMD assembly blitters on ARM" OFF)
+set_option(ARMNEON             "use NEON assembly blitters on ARM" OFF)
 set_option(DISKAUDIO           "Support the disk writer audio driver" ON)
 set_option(DUMMYAUDIO          "Support the dummy audio driver" ON)
 set_option(VIDEO_DIRECTFB      "Use DirectFB video driver" OFF)
@@ -359,6 +362,7 @@ dep_option(ARTS_SHARED         "Dynamically load aRts audio support" ON "ARTS" O
 set_option(NAS                 "Support the NAS audio API" ${UNIX_SYS})
 set_option(NAS_SHARED          "Dynamically load NAS audio API" ${UNIX_SYS})
 set_option(SNDIO               "Support the sndio audio API" ${UNIX_SYS})
+dep_option(SNDIO_SHARED        "Dynamically load the sndio audio API" ${UNIX_SYS} ON "SNDIO" OFF)
 set_option(FUSIONSOUND         "Use FusionSound audio driver" OFF)
 dep_option(FUSIONSOUND_SHARED  "Dynamically load fusionsound audio support" ON "FUSIONSOUND" OFF)
 set_option(LIBSAMPLERATE       "Use libsamplerate for audio rate conversion" ${UNIX_SYS})
@@ -399,6 +403,27 @@ set(SDL_STATIC ${SDL_STATIC_ENABLED_BY_DEFAULT} CACHE BOOL "Build a static versi
 dep_option(SDL_STATIC_PIC      "Static version of the library should be built with Position Independent Code" OFF "SDL_STATIC" OFF)
 set_option(SDL_TEST            "Build the test directory" OFF)
 
+# General source files
+file(GLOB SOURCE_FILES
+  ${SDL2_SOURCE_DIR}/src/*.c
+  ${SDL2_SOURCE_DIR}/src/atomic/*.c
+  ${SDL2_SOURCE_DIR}/src/audio/*.c
+  ${SDL2_SOURCE_DIR}/src/cpuinfo/*.c
+  ${SDL2_SOURCE_DIR}/src/dynapi/*.c
+  ${SDL2_SOURCE_DIR}/src/events/*.c
+  ${SDL2_SOURCE_DIR}/src/file/*.c
+  ${SDL2_SOURCE_DIR}/src/haptic/*.c
+  ${SDL2_SOURCE_DIR}/src/libm/*.c
+  ${SDL2_SOURCE_DIR}/src/locale/*.c
+  ${SDL2_SOURCE_DIR}/src/power/*.c
+  ${SDL2_SOURCE_DIR}/src/render/*.c
+  ${SDL2_SOURCE_DIR}/src/render/*/*.c
+  ${SDL2_SOURCE_DIR}/src/sensor/*.c
+  ${SDL2_SOURCE_DIR}/src/stdlib/*.c
+  ${SDL2_SOURCE_DIR}/src/thread/*.c
+  ${SDL2_SOURCE_DIR}/src/timer/*.c
+  ${SDL2_SOURCE_DIR}/src/video/*.c
+  ${SDL2_SOURCE_DIR}/src/video/yuv2rgb/*.c)
 
 
 if(ASSERTIONS STREQUAL "auto")
@@ -862,16 +887,6 @@ if(SDL_HAPTIC)
     # Haptic requires some private functions from the joystick subsystem.
     message_error("SDL_HAPTIC requires SDL_JOYSTICK, which is not enabled")
   endif()
-  file(GLOB HAPTIC_SOURCES ${SDL2_SOURCE_DIR}/src/haptic/*.c)
-  set(SOURCE_FILES ${SOURCE_FILES} ${HAPTIC_SOURCES})
-endif()
-if(SDL_SENSOR)
-  file(GLOB SENSOR_SOURCES ${SDL2_SOURCE_DIR}/src/sensor/*.c)
-  set(SOURCE_FILES ${SOURCE_FILES} ${SENSOR_SOURCES})
-endif()
-if(SDL_POWER)
-  file(GLOB POWER_SOURCES ${SDL2_SOURCE_DIR}/src/power/*.c)
-  set(SOURCE_FILES ${SOURCE_FILES} ${POWER_SOURCES})
 endif()
 
 
@@ -1174,9 +1189,6 @@ elseif(UNIX AND NOT APPLE AND NOT ANDROID AND NOT RISCOS)
             ioctl(0, KDGKBENT, &kbe);
         }" HAVE_INPUT_KD)
 
-    file(GLOB CORE_LINUX_SOURCES ${SDL2_SOURCE_DIR}/src/core/linux/*.c)
-    set(SOURCE_FILES ${SOURCE_FILES} ${CORE_LINUX_SOURCES})
-
     if(HAVE_INPUT_EVENTS)
       set(SDL_INPUT_LINUXEV 1)
     endif()
@@ -1212,7 +1224,8 @@ elseif(UNIX AND NOT APPLE AND NOT ANDROID AND NOT RISCOS)
       endif()
 
       if (HAVE_IBUS_IBUS_H OR HAVE_FCITX)
-        add_definitions(-DSDL_USE_IME)
+        set(SDL_USE_IME TRUE)
+        add_definitions(-DSDL_USE_IME)   # !!! FIXME: why isn't this a definition and not in SDL_config.h.cmake?
       endif()
       if(HAVE_LIBUNWIND_H)
         # We've already found the header, so REQUIRE the lib to be present
@@ -1221,6 +1234,36 @@ elseif(UNIX AND NOT APPLE AND NOT ANDROID AND NOT RISCOS)
         list(APPEND EXTRA_LIBS ${UNWIND_LIBRARIES} ${UNWIND_GENERIC_LIBRARIES})
       endif()
     endif()
+
+    if(HAVE_DBUS_DBUS_H)
+      set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_dbus.c")
+    endif()
+
+    if(SDL_USE_IME)
+      set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_ime.c")
+    endif()
+
+    if(HAVE_IBUS_IBUS_H)
+      set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_ibus.c")
+    endif()
+
+    if(HAVE_FCITX)
+      set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_fcitx.c")
+    endif()
+
+    if(HAVE_LIBUDEV_H)
+      set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_udev.c")
+    endif()
+
+    if(HAVE_INPUT_EVENTS)
+      set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_evdev.c")
+      set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_evdev_kbd.c")
+    endif()
+
+    # Always compiled for Linux, unconditionally:
+    set(SOURCE_FILES ${SOURCE_FILES} "${SDL2_SOURCE_DIR}/src/core/linux/SDL_threadprio.c")
+
+    # src/core/unix/*.c is included in a generic if(UNIX) section, elsewhere.
   endif()
 
   if(INPUT_TSLIB)
@@ -1509,11 +1552,6 @@ elseif(WINDOWS)
     if(HAVE_DINPUT_H)
       set(SDL_JOYSTICK_DINPUT 1)
       list(APPEND EXTRA_LIBS dinput8)
-      if(CMAKE_COMPILER_IS_MINGW)
-        list(APPEND EXTRA_LIBS dxerr8)
-      elseif (NOT USE_WINSDK_DIRECTX)
-        list(APPEND EXTRA_LIBS dxerr)
-      endif()
     endif()
     if(HAVE_XINPUT_H)
       set(SDL_JOYSTICK_XINPUT 1)
@@ -1711,7 +1749,7 @@ elseif(APPLE)
 
     if(VIDEO_VULKAN OR VIDEO_METAL OR RENDER_METAL)
       set(ORIG_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
-      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -x objective-c")
+      set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -ObjC")
       check_c_source_compiles("
         #include <AvailabilityMacros.h>
         #import <Metal/Metal.h>
@@ -1956,7 +1994,7 @@ endif()
 # endif()
 
 configure_file("${SDL2_SOURCE_DIR}/include/SDL_config.h.cmake"
-  "${CMAKE_CURRENT_BINARY_DIR}/include/SDL_config.h")
+  "${SDL2_BINARY_DIR}/include/SDL_config.h")
 
 # Prepare the flags and remove duplicates
 if(EXTRA_LDFLAGS)
@@ -1986,46 +2024,36 @@ if(NOT WINDOWS OR CYGWIN)
     set(ENABLE_STATIC_FALSE "")
   endif()
   if(SDL_SHARED)
+    set(PKG_CONFIG_LIBS_PRIV "
+Libs.private:")
     set(ENABLE_SHARED_TRUE "")
     set(ENABLE_SHARED_FALSE "#")
   else()
+    set(PKG_CONFIG_LIBS_PRIV "")
     set(ENABLE_SHARED_TRUE "#")
     set(ENABLE_SHARED_FALSE "")
   endif()
 
   # Clean up the different lists
   listtostr(EXTRA_LIBS _EXTRA_LIBS "-l")
-  set(SDL_STATIC_LIBS ${SDL_LIBS} ${EXTRA_LDFLAGS} ${_EXTRA_LIBS})
+  set(SDL_STATIC_LIBS ${EXTRA_LDFLAGS} ${_EXTRA_LIBS})
   list(REMOVE_DUPLICATES SDL_STATIC_LIBS)
   listtostr(SDL_STATIC_LIBS _SDL_STATIC_LIBS)
   set(SDL_STATIC_LIBS ${_SDL_STATIC_LIBS})
   listtostr(SDL_LIBS _SDL_LIBS)
   set(SDL_LIBS ${_SDL_LIBS})
-endif()
 
-if(ANDROID)
-FILE(GLOB PLATFORM_SRCS
-	${SDL2_SOURCE_DIR}/src/filesystem/unix/*.c
-	${SDL2_SOURCE_DIR}/src/filesystem/dummy/*.c
-	${SDL2_SOURCE_DIR}/src/filesystem/android/*.c
-	${SDL2_SOURCE_DIR}/src/video/android/*.c
-	${SDL2_SOURCE_DIR}/src/core/android/*.c
-	${SDL2_SOURCE_DIR}/src/timer/unix/*.c
-	${SDL2_SOURCE_DIR}/src/loadso/dlopen/*.c
-	${SDL2_SOURCE_DIR}/src/main/android/*.c
-	${SDL2_SOURCE_DIR}/src/thread/pthread/*.c
-	${SDL2_SOURCE_DIR}/src/audio/android/*.c
-	${SDL2_SOURCE_DIR}/src/joystick/dummy/*.c
-	${SDL2_SOURCE_DIR}/src/joystick/android/*.c
-	${SDL2_SOURCE_DIR}/src/power/android/*.c)
+  # MESSAGE(STATUS "SDL_LIBS: ${SDL_LIBS}")
+  # MESSAGE(STATUS "SDL_STATIC_LIBS: ${SDL_STATIC_LIBS}")
 
-	set(ANDROID_LDFLAGS "-Wl,--undefined=Java_org_libsdl_app_SDLActivity_nativeInit")
-endif()
-
-if (LINUX OR EMSCRIPTEN)
-	set(DEFINES USING_GENERATED_CONFIG_H)
-else()
-	set(DEFINES "")
+  configure_file("${SDL2_SOURCE_DIR}/sdl2.pc.in"
+    "${SDL2_BINARY_DIR}/sdl2.pc" @ONLY)
+  configure_file("${SDL2_SOURCE_DIR}/sdl2-config.in"
+    "${SDL2_BINARY_DIR}/sdl2-config")
+  configure_file("${SDL2_SOURCE_DIR}/sdl2-config.in"
+    "${SDL2_BINARY_DIR}/sdl2-config" @ONLY)
+  configure_file("${SDL2_SOURCE_DIR}/SDL2.spec.in"
+    "${SDL2_BINARY_DIR}/SDL2.spec" @ONLY)
 endif()
 
 ##### Info output #####
@@ -2071,8 +2099,24 @@ if(UNIX)
   message(STATUS "")
 endif()
 
-endif(NOT SDL2_FOUND)
-if (FALSE) # to keep changes as small as possible in our own copy
+if(WARN_ABOUT_ARM_SIMD_ASM_MIT)
+  message(STATUS "")
+  message(STATUS "SDL is being built with ARM SIMD optimizations, which")
+  message(STATUS "uses code licensed under the MIT license. If this is a")
+  message(STATUS "problem, please disable that code by rerunning CMake with:")
+  message(STATUS "")
+  message(STATUS "    -DARMSIMD=OFF")
+endif()
+
+if(WARN_ABOUT_ARM_NEON_ASM_MIT)
+  message(STATUS "")
+  message(STATUS "SDL is being built with ARM NEON optimizations, which")
+  message(STATUS "uses code licensed under the MIT license. If this is a")
+  message(STATUS "problem, please disable that code by rerunning CMake with:")
+  message(STATUS "")
+  message(STATUS "    -DARMNEON=OFF")
+endif()
+
 # Ensure that the extra cflags are used at compile time
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
 
@@ -2080,6 +2124,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
 add_library(SDL2main STATIC ${SDLMAIN_SOURCES})
 target_include_directories(SDL2main PUBLIC "$<BUILD_INTERFACE:${SDL2_SOURCE_DIR}/include>" $<INSTALL_INTERFACE:include> $<INSTALL_INTERFACE:include/SDL2>)
 set(_INSTALL_LIBS "SDL2main")
+if (NOT ANDROID)
+  set_target_properties(SDL2main PROPERTIES DEBUG_POSTFIX "${SDL_CMAKE_DEBUG_POSTFIX}")
+endif()
 
 if (ANDROID AND HAVE_HIDAPI)
   set(_INSTALL_LIBS ${_INSTALL_LIBS} "hidapi")
@@ -2109,8 +2156,13 @@ if(SDL_SHARED)
     set_target_properties(SDL2 PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
   endif()
   set(_INSTALL_LIBS "SDL2" ${_INSTALL_LIBS})
-  target_link_libraries(SDL2 ${EXTRA_LIBS} ${EXTRA_LDFLAGS})
+  target_link_libraries(SDL2 PRIVATE ${EXTRA_LIBS} ${EXTRA_LDFLAGS})
   target_include_directories(SDL2 PUBLIC "$<BUILD_INTERFACE:${SDL2_SOURCE_DIR}/include>" $<INSTALL_INTERFACE:include> $<INSTALL_INTERFACE:include/SDL2>)
+  if(ANDROID)
+    target_include_directories(SDL2 PRIVATE ${ANDROID_NDK}/sources/android/cpufeatures)
+  else()
+    set_target_properties(SDL2 PROPERTIES DEBUG_POSTFIX "${SDL_CMAKE_DEBUG_POSTFIX}")
+  endif()
   if(IOS OR TVOS)
     set_property(TARGET SDL2 APPEND_STRING PROPERTY COMPILE_FLAGS "-fobjc-arc")
     target_compile_definitions(SDL2 PRIVATE IOS_DYLIB=1)
@@ -2153,10 +2205,24 @@ if(SDL_STATIC)
   # libraries - do we need to consider this?
   set(_INSTALL_LIBS "SDL2-static" ${_INSTALL_LIBS})
   target_link_libraries(SDL2-static ${EXTRA_LIBS} ${EXTRA_LDFLAGS})
-  target_include_directories(SDL2-static PUBLIC "$<BUILD_INTERFACE:${SDL2_SOURCE_DIR}/include>" $<INSTALL_INTERFACE:include/SDL2>)
+  target_include_directories(SDL2-static PUBLIC "$<BUILD_INTERFACE:${SDL2_SOURCE_DIR}/include>" $<INSTALL_INTERFACE:include> $<INSTALL_INTERFACE:include/SDL2>)
+  if(ANDROID)
+    target_include_directories(SDL2-static PRIVATE ${ANDROID_NDK}/sources/android/cpufeatures)
+  else()
+    set_target_properties(SDL2-static PROPERTIES DEBUG_POSTFIX "${SDL_CMAKE_DEBUG_POSTFIX}")
+  endif()
   if(IOS OR TVOS)
     set_property(TARGET SDL2-static APPEND_STRING PROPERTY COMPILE_FLAGS "-fobjc-arc")
   endif()
+endif()
+
+##### Tests #####
+
+if(SDL_TEST)
+  file(GLOB TEST_SOURCES ${SDL2_SOURCE_DIR}/src/test/*.c)
+  add_library(SDL2_test STATIC ${TEST_SOURCES})
+
+  add_subdirectory(test)
 endif()
 
 ##### Installation targets #####
@@ -2169,7 +2235,7 @@ install(TARGETS ${_INSTALL_LIBS} EXPORT SDL2Targets
 if (WINDOWS)
   set(PKG_PREFIX "cmake")
 else ()
-  set(PKG_PREFIX "lib/cmake/SDL2")
+  set(PKG_PREFIX "lib${LIB_SUFFIX}/cmake/SDL2")
 endif ()
 
 include(CMakePackageConfigHelpers)
@@ -2200,19 +2266,24 @@ endforeach()
 list(APPEND INCLUDE_FILES ${BIN_INCLUDE_FILES})
 install(FILES ${INCLUDE_FILES} DESTINATION include/SDL2)
 
-set(SOPOSTFIX "")
+string(TOUPPER "${CMAKE_BUILD_TYPE}" UPPER_BUILD_TYPE)
+if (UPPER_BUILD_TYPE MATCHES DEBUG)
+  set(SOPOSTFIX "${SDL_CMAKE_DEBUG_POSTFIX}")
+else()
+  set(SOPOSTFIX "")
+endif()
 
 if(NOT (WINDOWS OR CYGWIN))
   if(SDL_SHARED)
-    if (APPLE)
-        set(SOEXT "dylib")
-    else()
-        set(SOEXT "so")
+    set(SOEXT ${CMAKE_SHARED_LIBRARY_SUFFIX}) # ".so", ".dylib", etc.
+    get_target_property(SONAME SDL2 OUTPUT_NAME)
+    if(NOT ANDROID)
+        install(CODE "
+          execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+            \"lib${SONAME}${SOPOSTFIX}${SOEXT}\" \"libSDL2${SOPOSTFIX}${SOEXT}\"
+            WORKING_DIRECTORY \"${SDL2_BINARY_DIR}\")")
+        install(FILES ${SDL2_BINARY_DIR}/libSDL2${SOPOSTFIX}${SOEXT} DESTINATION "lib${LIB_SUFFIX}")
     endif()
-    install(CODE "
-      execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-      \"libSDL2-2.0.${SOEXT}\" \"libSDL2.${SOEXT}\")")
-    install(FILES ${SDL2_BINARY_DIR}/libSDL2.${SOEXT} DESTINATION "lib${LIB_SUFFIX}")
   endif()
   if(FREEBSD)
     # FreeBSD uses ${PREFIX}/libdata/pkgconfig
@@ -2226,41 +2297,37 @@ if(NOT (WINDOWS OR CYGWIN))
   install(FILES "${SDL2_SOURCE_DIR}/sdl2.m4" DESTINATION "${CMAKE_INSTALL_FULL_DATAROOTDIR}/aclocal")
 endif()
 
-endif(FALSE)
+##### Uninstall target #####
 
-engine_add_library(
-	LIB sdl2
-	SRCS ${SOURCE_FILES} ${SDLMAIN_SOURCES} ${PLATFORM_SRCS}
-	DEFINES ${DEFINES})
-if (NOT SDL2_FOUND)
-	if (CMAKE_DL_LIBS)
-		list(APPEND EXTRA_LIBS ${CMAKE_DL_LIBS})
-	endif()
-	target_link_libraries(sdl2 ${EXTRA_LIBS})
-	target_include_directories(sdl2 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
-	set_target_properties(sdl2 PROPERTIES POSITION_INDEPENDENT_CODE ${SDL_STATIC_PIC})
-	set_target_properties(sdl2 PROPERTIES LINK_FLAGS_RELEASE "${EXTRA_LDFLAGS}")
-	set_target_properties(sdl2 PROPERTIES COMPILE_FLAGS "${SDL_CFLAGS} ${EXTRA_CFLAGS}")
-	if (MSVC)
-		if (NOT LIBC)
-			set_target_properties(sdl2 PROPERTIES LINK_FLAGS_RELEASE "/NODEFAULTLIB")
-			set_target_properties(sdl2 PROPERTIES LINK_FLAGS_DEBUG "/NODEFAULTLIB")
-			set_target_properties(sdl2 PROPERTIES STATIC_LIBRARY_FLAGS "/NODEFAULTLIB")
-		endif()
-	else ()
-		set(COMPILEFLAGS "")
-		foreach(_FLAG -Wno-implicit-fallthrough -Wno-sign-compare -Wno-cast-function-type)
-			string(REPLACE "=" "_" _NAME ${_FLAG})
-			string(REPLACE "-" "_" _NAME ${_NAME})
-			check_c_compiler_flag(${_FLAG} HAVE_FLAG${_NAME})
-			if (HAVE_FLAG${_NAME})
-				set(COMPILEFLAGS "${COMPILEFLAGS} ${_FLAG}")
-			endif()
-		endforeach()
-		set_target_properties(sdl2 PROPERTIES COMPILE_FLAGS "${COMPILEFLAGS}")
-	endif()
-else()
-	if (WINDOWS)
-		target_link_libraries(sdl2 INTERFACE SDL2main)
-	endif()
+if(NOT TARGET uninstall)
+  configure_file(
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+      "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+      IMMEDIATE @ONLY)
+
+  add_custom_target(uninstall
+      COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 endif()
+
+set(COMPILEFLAGS "")
+foreach(_FLAG -Wno-implicit-fallthrough -Wno-sign-compare -Wno-cast-function-type -Wno-discarded-qualifiers)
+	string(REPLACE "=" "_" _NAME ${_FLAG})
+	string(REPLACE "-" "_" _NAME ${_NAME})
+	check_c_compiler_flag(${_FLAG} HAVE_FLAG${_NAME})
+	if (HAVE_FLAG${_NAME})
+		set(COMPILEFLAGS "${COMPILEFLAGS} ${_FLAG}")
+	endif()
+endforeach()
+set_target_properties(SDL2-static PROPERTIES COMPILE_FLAGS "${COMPILEFLAGS}")
+
+add_library(sdl2 INTERFACE)
+target_include_directories(sdl2 INTERFACE ${SDL2_BINARY_DIR}/include ${SDL2_SOURCE_DIR}/include)
+target_link_libraries(sdl2 INTERFACE SDL2-static)
+#target_include_directories(sdl2 INTERFACE ${SDL2_BINARY_DIR}/include ${SDL2_SOURCE_DIR}/include)
+#target_link_libraries(sdl2 INTERFACE SDL2-static)
+else(SDL2_FOUND)
+add_library(sdl2 INTERFACE)
+add_library(SDL2::SDL2 ALIAS sdl2)
+target_include_directories(sdl2 INTERFACE ${SDL2_INCLUDE_DIRS})
+target_link_libraries(sdl2 INTERFACE ${SDL2_LIBRARIES})
+endif(NOT SDL2_FOUND)
